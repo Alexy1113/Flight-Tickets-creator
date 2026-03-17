@@ -34,4 +34,4 @@ Use:
 ```bash
 java Prettifier --color ./input.txt ./output.txt ./airport-lookup.csv
 ```
-The output file remains clean and plain-text, while the console display highlights dates (green), times (cyan), and timezone offsets (yellow).
+The output file remains clean and plain-text, while the console display highlights dates (green), times (cyan), and Airport names (yellow).

@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
 public class Prettifier {
     
     // Создаем «словари» для быстрого поиска.
-    // Ключ — это код (например, "LAX"), значение — то, что нужно вывести (название аэропорта или город).
+    // Ключ — это код (например, "LAX"), значение — то, что нужно вывести (название аэропорта).
     static Map<String, String> iataToName = new HashMap<>();
     static Map<String, String> icaoToName = new HashMap<>();
     static Map<String, String> iataToCity = new HashMap<>();
@@ -24,7 +24,7 @@ public class Prettifier {
         
         // 1. Проверяем, вызвал ли пользователь справку через флаг "-h"
         if (args.length > 0 && args[0].equals("-h")) {
-            System.out.println("itinerary usage:\n$ java Prettifier.java ./input.txt ./output.txt ./airport-lookup.csv");
+            System.out.println("\u001B[33mitinerary usage:\n$ java Prettifier.java ./input.txt ./output.txt ./airport-lookup.csv\u001B[0m");
             return; // Завершаем работу, так как пользователь просто хотел узнать инструкцию
         }
 
@@ -160,41 +160,40 @@ public class Prettifier {
 
     // Метод для поиска и замены кодов аэропортов на названия/города
 private static String replaceCodes(String text) {
-    // Регулярное выражение ищет два варианта:
-    // Группа 1: ##([A-Z]{4}) — две решетки и 4 буквы (ICAO)
-    // Группа 2: #([A-Z]{3})  — одна решетка и 3 буквы (IATA)
-    Pattern p = Pattern.compile("##([A-Z]{4})|#([A-Z]{3})");
+    // Обновленное регулярное выражение для поддержки префикса города (*)
+    // Группа 1: (\\*?) - Определяет, есть ли символ '*' (для запроса города)
+    // Группа 2: (##([A-Z]{4})|#([A-Z]{3})) - Исходный паттерн для кодов
+    // Группа 3: ([A-Z]{4}) - Код ICAO
+    // Группа 4: ([A-Z]{3}) - Код IATA
+    Pattern p = Pattern.compile("(\\*?)(##([A-Z]{4})|#([A-Z]{3}))");
     Matcher m = p.matcher(text);
     StringBuilder sb = new StringBuilder();
 
-    // Цикл проходит по всему тексту и ищет совпадения с шаблоном
     while (m.find()) {
+        // Проверяем, был ли найден префикс '*' для поиска города
+        boolean isCityLookup = m.group(1).equals("*");
+        
+        String icaoCode = m.group(3); // 4-буквенный код ICAO
+        String iataCode = m.group(4); // 3-буквенный код IATA
         String replacement = null;
 
-        // Проверяем, какая группа сработала
-        if (m.group(1) != null) {
-            // Если нашли ##XXXX, берем значение из словаря ICAO
-            String icaoCode = m.group(1);
-            replacement = icaoToName.get(icaoCode);
-        } else if (m.group(2) != null) {
-            // Если нашли #XXX, берем значение из словаря IATA
-            String iataCode = m.group(2);
-            replacement = iataToName.get(iataCode);
+        if (icaoCode != null) {
+            // Если это ICAO, выбираем, что искать: город или название аэропорта
+            replacement = isCityLookup ? icaoToCity.get(icaoCode) : icaoToName.get(icaoCode);
+        } else if (iataCode != null) {
+            // Если это IATA, также выбираем между городом и названием
+            replacement = isCityLookup ? iataToCity.get(iataCode) : iataToName.get(iataCode);
         }
 
-        // Если код найден в нашем справочнике (replacement не пустой)
+        // Если замена для кода найдена, используем ее
         if (replacement != null) {
-            // Заменяем код на название аэропорта
             m.appendReplacement(sb, Matcher.quoteReplacement(replacement));
         } else {
-            // Если кода нет в базе, оставляем его как был в тексте (например, #BUA)
-            m.appendReplacement(sb, Matcher.quoteReplacement(m.group(0)));
+            // В противном случае оставляем исходный код (например, *#LHR) без изменений
+            m.appendReplacement(sb, m.group(0));
         }
     }
-    
-    // Добавляем оставшуюся часть текста после последнего найденного кода
     m.appendTail(sb);
-    
     return sb.toString();
 }
 

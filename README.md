@@ -27,9 +27,7 @@ java Prettifier -h
 ## 📄 Additional Features & Bonus Functionality
 **Dynamic CSV Parsing:** The program automatically detects column order in the airport-lookup.csv by reading the header row, supporting flexible data structures.
 
-**Bonus (Colored Output):** A --color flag has been implemented to print the processed itinerary to the console with ANSI color coding for better readability.
-Use: 
-```bash
-java Prettifier --color ./input.txt ./output.txt ./airport-lookup.csv
-```
+**City Name Support:** By prefixing codes with * (e.g., *#LAX), the program outputs the city name instead of the airport name.
+
+**Bonus (Colored Console Output):** 
 The output file remains clean and plain-text, while the console display highlights dates (green), times (cyan), and Airport names (yellow).

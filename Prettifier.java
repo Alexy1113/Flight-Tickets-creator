@@ -1,4 +1,8 @@
 import java.io.*;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.OffsetDateTime;
@@ -21,69 +25,92 @@ public class Prettifier {
      * Он проверяет команды пользователя, загружает данные и управляет потоками файлов.
      */
     public static void main(String[] args) {
+
+        // Принудительно устанавливаем UTF-8 для вывода в консоль
+        System.setOut(new PrintStream(System.out, true, StandardCharsets.UTF_8));
         
         // 1. Проверяем, вызвал ли пользователь справку через флаг "-h"
         if (args.length > 0 && args[0].equals("-h")) {
             System.out.println("\u001B[33mitinerary usage:\n$ java Prettifier.java ./input.txt ./output.txt ./airport-lookup.csv\u001B[0m");
-            return; // Завершаем работу, так как пользователь просто хотел узнать инструкцию
+            System.exit(0); // Завершаем работу с кодом 0, так как пользователь просто хотел узнать инструкцию
         }
 
         // 2. Проверяем, переданы ли ровно 3 аргумента (входной файл, выходной файл, файл данных)
         // Если аргументов не 3, значит вызов был некорректным
         if (args.length != 3) {
-            System.out.println("itinerary usage:\n$ java Prettifier.java ./input.txt ./output.txt ./airport-lookup.csv");
-            return; // Завершаем программу, так как не можем продолжить без путей к файлам
+            System.out.println("\u001B[33mitinerary usage:\n$ java Prettifier.java ./input.txt ./output.txt ./airport-lookup.csv\u001B[0m");
+            System.exit(1); // Завершаем программу, так как не можем продолжить без путей к файлам
         }
-
-        // 3. Загружаем справочник аэропортов из файла, указанного третьим аргументом (args[2])
-        // Внутри этого метода происходит проверка на существование файла и парсинг CSV
-        loadAirportData(args[2]);
+        
+        // ЛОГИКА ДВОЙНОЙ ПРОВЕРКИ
+        boolean errorFound = false;
+        File inputFile = new File(args[0]); // Создаем объект файла для input.txt (первый аргумент)
+        File lookupFile = new File(args[2]); // Создаем объект файла для lookup.csv пути (второй аргумент)
 
         // 4. Начинаем процесс обработки контента
+            
+        // Если входного файла не существует, сообщаем об этом пользователю
+        if (!inputFile.exists()) {
+            System.out.println("\u001B[31mInput not found\u001B[0m");
+            errorFound = true; // Если не существует, записываем флаг ошибки
+        }
+        
+        // Если lookup.csv не существует, сообщаем об этом пользователю
+        if (!lookupFile.exists()) {
+            System.out.println("\u001B[31mAirport lookup not found\u001B[0m");
+            errorFound = true; // Если не существует, записываем флаг ошибки
+        }
+
+        // Если хотя бы один файл не найден — выходим (если оба — напечатает оба сообщения)
+        if (errorFound) {
+            System.exit(1); 
+        }
+
         try {
-            // Создаем объект файла для входного пути (первый аргумент)
-            File inputFile = new File(args[0]);
-            
-            // Если входного файла не существует, сообщаем об этом пользователю
-            if (!inputFile.exists()) {
-                System.out.println("Input not found");
-                return; // Останавливаем выполнение, чтобы не создавать пустой output.txt
-            }
-            
+            // Сначала загружаем данные из CSV
+            loadAirportData(args[2]);
+
             // Считываем весь текст из файла в одну большую строку
             String content = Files.readString(inputFile.toPath());
-            
+        
             // Вызываем метод обработки текста, который заменяет коды и форматирует даты
             String result = processItinerary(content);
-            
+        
             // Записываем полученный «красивый» текст в выходной файл (второй аргумент)
             Files.writeString(Paths.get(args[1]), result);
 
             // Выводим цветной результат в консоль (бонусная функция)
             printColoredOutput(result);
-            
+        
         } catch (IOException e) {
             // Если возникла системная ошибка (например, нет прав на чтение/запись),
             // мы просто завершаем работу (в рамках ТЗ лишние сообщения об ошибках не требуются)
         }
     }
 
+    // Создаём метод для выведения Airport lookup malformed в консоль красным цветом и закрыванием программы
+    private static void failMalformed() {
+    System.out.println("\u001B[31mAirport lookup malformed\u001B[0m");
+    System.exit(1);
+}
+
     // Метод для чтения CSV файла и заполнения наших словарей
     private static void loadAirportData(String path) {
         File file = new File(path);
-        // Если файла по указанному пути нет — выводим ошибку и завершаем программу
-        if (!file.exists()) {
-            System.out.println("Airport lookup not found");
-            System.exit(1);
-        }
+        
+        // Создаем "строгий" декодер UTF-8
+        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
+        // REPORT заставляет программу выкинуть исключение, если байт "битый" или не из UTF-8
+        decoder.onMalformedInput(CodingErrorAction.REPORT);
+        decoder.onUnmappableCharacter(CodingErrorAction.REPORT);
 
         // Открываем файл для чтения
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            // Читаем самую первую строку (заголовок), чтобы понять, где какие данные
+        // Читаем самую первую строку (заголовок), чтобы понять, где какие данные
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(file), decoder))) {
             String headerLine = br.readLine();
             if (headerLine == null) throw new IOException("Empty file");
 
-            // Разбиваем заголовок по запятым
+            // Разбиваем заголовок по запятым для определения структуры CSV
             String[] header = headerLine.split(",");
             int nameIdx = -1, icaoIdx = -1, iataIdx = -1, cityIdx = -1;
 
@@ -98,46 +125,52 @@ public class Prettifier {
 
             // Если хоть одна из нужных колонок не нашлась — значит файл «битый»
             if (nameIdx == -1 || icaoIdx == -1 || iataIdx == -1 || cityIdx == -1) {
-                System.out.println("Airport lookup malformed");
-                System.exit(1);
+                failMalformed();
             }
 
             // Читаем файл построчно до самого конца
             String line;
             while ((line = br.readLine()) != null) {
+                
+            //Проверка на ромбики, которые уже были в файле как текст
+            if (line.contains("\uFFFD")) {
+                failMalformed();
+            }
+                
                 // Разделяем строку на части. -1 позволяет увидеть даже пустые ячейки
                 String[] cols = line.split(",", -1);
                 
-                // Проверяем: не меньше ли в строке данных, чем колонок в заголовке
+                // Проверяем не меньше ли в строке данных, чем колонок в заголовке
                 if (cols.length < header.length) {
-                    System.out.println("Airport lookup malformed");
-                    System.exit(1);
+                    failMalformed();
                 }
                 
                 // Проверяем каждую ячейку: если она пустая — это ошибка
                 for (String col : cols) {
                     if (col.trim().isEmpty()) {
-                        System.out.println("Airport lookup malformed");
-                        System.exit(1);
+                        failMalformed();
                     }
                 }
 
-                // Извлекаем нужные данные из массива по найденным ранее индексам
+                // Извлекаем нужные данные из массива по найденным ранее индексам очищая их от случайных пробелов по краям
                 String name = cols[nameIdx].trim();
                 String city = cols[cityIdx].trim();
                 String icao = cols[icaoIdx].trim();
                 String iata = cols[iataIdx].trim();
 
-                // Сохраняем данные в наши «словари» для быстрого поиска в будущем
+                // Сохраняем данные в наши «словари» для быстрого поиска в будущем по кодам (O(1))
                 iataToName.put(iata, name);
                 icaoToName.put(icao, name);
                 iataToCity.put(iata, city);
                 icaoToCity.put(icao, city);
             }
+            
+        } catch (CharacterCodingException e) {
+        // ЭТОТ БЛОК сработает, если декодер обнаружил байты другой кодировки (не UTF-8) с битыми символами (с не-английскими буквами)
+            failMalformed();
         } catch (IOException e) {
-            // Если возникла любая ошибка чтения — значит данные повреждены
-            System.out.println("Airport lookup malformed");
-            System.exit(1);
+        // Срабатывает при системных ошибках (файл занят, поврежден диск и т.д.)
+            failMalformed();
         }
     }
 
@@ -184,18 +217,18 @@ private static String replaceCodes(String text) {
             // Если это IATA, также выбираем между городом и названием
             replacement = isCityLookup ? iataToCity.get(iataCode) : iataToName.get(iataCode);
         }
-
-        // Если замена для кода найдена, используем ее
-        if (replacement != null) {
-            m.appendReplacement(sb, Matcher.quoteReplacement(replacement));
-        } else {
-            // В противном случае оставляем исходный код (например, *#LHR) без изменений
-            m.appendReplacement(sb, m.group(0));
+        // Если код не найден в базе данных CSV
+        if (replacement == null) {
+            System.out.println("\u001B[31mAirport lookup not found\u001B[0m");
+            System.exit(1); // Немедленное завершение, файл НЕ будет создан
         }
+        // Код аэропорта найден => вставляем НАЗВАНИЕ (replacement)
+            m.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+        
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
-    m.appendTail(sb);
-    return sb.toString();
-}
 
     // Метод для конвертации ISO 8601 дат в удобный формат
     // Метод для поиска и замены форматов дат/времени (D, T12, T24)
@@ -237,7 +270,7 @@ private static String replaceCodes(String text) {
             } else {
                 // Для T12 используем 12-часовой формат без пробела перед AM/PM (например, 10:30AM)
                 // Для T24 используем обычный 24-часовой формат (например, 22:30)
-                String pattern = type.equals("T12") ? "hh:mma" : "HH:mm";
+                String pattern = type.equals("T12") ? "hh:mm a" : "HH:mm";
                 
                 // Склеиваем отформатированное время и наш часовой пояс в скобках
                 replacement = odt.format(DateTimeFormatter.ofPattern(pattern, Locale.US)) + " " + formattedOffset;
@@ -259,24 +292,29 @@ private static String replaceCodes(String text) {
 
     // Метод для вывода текста в консоль с цветовым выделением (бонусная функция)
     private static void printColoredOutput(String text) {
+    // 1. Регулярка для аэропортов (ЖЕЛТЫЙ)
+    // Добавляем исключения
+    String airportPattern = "\\b(?!Flight|Depart|Arrival|Departure|Check-in)" +
+    "([A-Z][\\p{L}0-9.'-]*" + 
+    // Добавлена поддержка строчных связок (de, d', of, the) для международных названий
+    "(?: (?!at|to|from|in|by|and)(?:[A-Z][\\p{L}0-9.'-]*|de|d'|of|the))* " + 
+    "(?:Airport|Air base|Bay|Island|Field|International|Municipal|Heliport|Airstrip|Aviation|Regional|Station|Base|Port|Aéroport))";
+
     String colored = text
-        // 1. Названия аэропортов (ЖЕЛТЫЙ)
-        // Окрашиваются в желтый (33) слова:
-        // Airport|Air base|Bay|Island|Field|International|Municipal|Heliport|Airstrip|Aviation|Regional|Station|Base|Port
-        // И слова с загрлавной буквы перед ними, кроме слов:
-        // Flight, Depart, Arrival, Departure, arrival, departure
-        .replaceAll("\\b(?!Flight|Depart|Arrival|Departure|arrival|departure)([A-Z][a-z0-9]+(?: [A-Z][a-z0-9]+)* (?:Airport|Air base|Bay|Island|Field|International|Municipal|Heliport|Airstrip|Aviation|Regional|Station|Base|Port))", "\u001B[33m$1\u001B[0m")
-        // 2. Даты — зеленый (32)
-        .replaceAll("([0-9]{2} [A-Z][a-z]{2} [0-9]{4})", "\u001B[32m$1\u001B[0m") 
+        // 2. Красим аэропорты
+        .replaceAll(airportPattern, "\u001B[33m$1\u001B[0m")
         
-        // 3. Время — голубой (36)
-        .replaceAll("([0-9]{2}:[0-9]{2}( [AP]M)?)", "\u001B[36m$1\u001B[0m") 
+        // Даты (ЗЕЛЕНЫЙ) - напр. 16 Mar 2026
+        .replaceAll("(\\d{1,2} [A-Z][a-z]{2} \\d{4})", "\u001B[32m$1\u001B[0m")
         
-        // 4. Смещение в скобках: 
-        // Ищем открывающую скобку '(', затем всё до закрывающей, затем ')'
-        // Красим только содержимое (группа $1) в голубой (36)
+        // Время (ГОЛУБОЙ) - напр. 14:30 или 02:30 PM
+        .replaceAll("(\\d{2}:\\d{2}(?: [AP]M)?)", "\u001B[36m$1\u001B[0m")
+        
+        // 3. Красим даты и время
+        // Смещение в скобках (ГОЛУБОЙ) - напр. (+02:00)
+        // Красим только содержимое внутри скобок
         .replaceAll("\\(([^)]+)\\)", "(\u001B[36m$1\u001B[0m)");
-    
+
     System.out.println(colored);
-}
+    }
 }

@@ -75,8 +75,14 @@ public class Prettifier {
             // First, load the data from the CSV
             loadAirportData(args[2]);
 
-            // Read the entire text from the file into one large string
+            // Read the entire text from the input file into one large string
             String content = Files.readString(inputFile.toPath());
+            
+            // If input file is empty, inform the user and exit
+            if (content.trim().isEmpty()) {
+                System.out.println("\u001B[31mInput empty\u001B[0m"); //
+                System.exit(1);
+            }
         
             // Call the text processing method, which replaces codes and formats dates
             String result = processItinerary(content);

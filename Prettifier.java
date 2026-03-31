@@ -47,8 +47,6 @@ public class Prettifier {
             System.exit(1); // Exit the program, as we cannot continue without the file paths
         }
         
-        // Logic to check for the existence of input and lookup, if one is missing, or both are
-        boolean errorFound = false;
         File inputFile = new File(args[0]); // Create a File object for input.txt (first argument)
         File lookupFile = new File(args[2]); // Create a File object for the lookup.csv path (third argument)
 
@@ -57,18 +55,13 @@ public class Prettifier {
         // If the input file does not exist, inform the user
         if (!inputFile.exists()) {
             System.out.println("\u001B[31mInput not found\u001B[0m");
-            errorFound = true; // If it doesn't exist, set the error flag
-        }
+            System.exit(1); // If it doesn't exist, exit the program
+       }
         
         // If lookup.csv does not exist, inform the user
         if (!lookupFile.exists()) {
             System.out.println("\u001B[31mAirport lookup not found\u001B[0m");
-            errorFound = true; // If it doesn't exist, set the error flag
-        }
-
-        // If at least one file is not found - exit (if both are missing, it will print both messages)
-        if (errorFound) {
-            System.exit(1); 
+            System.exit(1); // If it doesn't exist, exit the program
         }
 
         try {
@@ -94,7 +87,8 @@ public class Prettifier {
             printColoredOutput(result);
         
         } catch (IOException e) {
-            // If a system error occurred (e.g., no read/write permissions),
+            // If a system error occurred (e.g., no read/write permissions)
+            System.err.println("System error: " + e.getMessage());
             // we just terminate the program (extra error messages are not required by the spec)
         }
     }
@@ -154,10 +148,9 @@ public class Prettifier {
             }
                 
                 // Split the string into parts. -1 allows seeing even empty cells
-                String[] cols = line.split(",", -1);
-                
+                String[] cols = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1);                
                 // Check if the row has fewer data items than columns in the header
-                if (cols.length < header.length) {
+                if (cols.length != header.length) {
                     failMalformed();
                 }
                 
@@ -262,10 +255,10 @@ private static String replaceCodes(String text) {
             // If it's IATA, also choose between city and name
             replacement = isCityLookup ? iataToCity.get(iataCode) : iataToName.get(iataCode);
         }
-        // If the code is not found in the CSV database
+        // If the airport code is not found in the CSV database
         if (replacement == null) {
-            System.out.println("\u001B[31mAirport lookup not found\u001B[0m");
-            System.exit(1); // Immediate termination, the file will NOT be created
+        // Put the unchanged airport code in the output.txt
+            replacement = codeMatcher.group(0);
         }
         // Airport code found => insert the NAME (replacement)
             codeMatcher.appendReplacement(resultBuilder, Matcher.quoteReplacement(replacement));

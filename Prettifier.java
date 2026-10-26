@@ -353,6 +353,7 @@ private static String replaceCodes(String text) {
         // Color only the content inside the parentheses
         .replaceAll("\\(([^)]+)\\)", "(\u001B[36m$1\u001B[0m)");
 
+    System.out.println();
     System.out.println(colored);
     }
 }
